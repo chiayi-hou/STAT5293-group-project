@@ -39,6 +39,24 @@ def load_dataset(data_path):
         test_files,
         np.array(test_labels))
 
+# helper function for image preprocessing and feature extraction
+# I'll add comments later
+def get_img_features(img_files, f=0.05):
+    img_features = []
+    for img in img_files:
+        # Image preprocessing 
+        pupil, iris = IrisLocalization(img)
+        normalized_img = IrisNormalization(img, pupil, iris)
+        
+        # image enhancement
+        enhanced_img = image_enhancement(normalized_img)
+
+        # feature extraction 
+        feature = feature_extraction(enhanced_img, f)
+        img_features.append(feature)
+
+    return img_features
+
 # 待处理！！
 def run_recognition(train_features, train_labels,test_features, test_labels):
     # Iris matching
@@ -67,33 +85,9 @@ if __name__ == "__main__":
     print("Testing images:", len(test_files))
     print("Number of classes:", len(set(train_labels)))
 
-    # image preprocessing and feature extraction (training set)
-    train_features = []
-    for img in train_files:
-        # Image preprocessing 
-        pupil, iris = IrisLocalization(img)
-        normalized_img = IrisNormalization(img, pupil, iris)
-        
-        # image enhancement
-        enhanced_img = image_enhancement(normalized_img)
-
-        # feature extraction 
-        feature = feature_extraction(enhanced_img, f=0.05)
-        train_features.append(feature)
-
-    # image preprocessing and feature extraction (test set)
-    test_features = []
-    for img in test_files:
-        # Image preprocessing
-        pupil, iris = IrisLocalization(img)
-        normalized_img = IrisNormalization(img, pupil, iris)
-        
-        # image enhancement
-        enhanced_img = image_enhancement(normalized_img)
-
-        # feature extraction 
-        feature = feature_extraction(enhanced_img, f=0.05)
-        test_features.append(feature)
+    # image preprocessing and feature extraction 
+    train_features = get_img_features(train_files)
+    test_features = get_img_features(test_files)
     
     # Iris matching and evaluation 
     # run_recognition(
