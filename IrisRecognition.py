@@ -1,5 +1,9 @@
 import os
 import numpy as np
+from IrisLocalization import IrisLocalization
+from IrisNormalization import IrisNormalization
+from ImageEnhancement import image_enhancement
+from FeatureExtraction import feature_extraction
 from IrisMatching import iris_matching
 from PerformanceEvaluation import (evaluate_identification,evaluate_verification)
 
@@ -63,10 +67,34 @@ if __name__ == "__main__":
     print("Testing images:", len(test_files))
     print("Number of classes:", len(set(train_labels)))
 
-    # Image preprocessing (Person A)
+    # image preprocessing and feature extraction (training set)
+    train_features = []
+    for img in train_files:
+        # Image preprocessing 
+        pupil, iris = IrisLocalization(img)
+        normalized_img = IrisNormalization(img, pupil, iris)
+        
+        # image enhancement
+        enhanced_img = image_enhancement(normalized_img)
 
-    # Feature extraction (Person B)
+        # feature extraction 
+        feature = feature_extraction(enhanced_img, f=0.05)
+        train_features.append(feature)
 
+    # image preprocessing and feature extraction (test set)
+    test_features = []
+    for img in test_files:
+        # Image preprocessing
+        pupil, iris = IrisLocalization(img)
+        normalized_img = IrisNormalization(img, pupil, iris)
+        
+        # image enhancement
+        enhanced_img = image_enhancement(normalized_img)
+
+        # feature extraction 
+        feature = feature_extraction(enhanced_img, f=0.05)
+        test_features.append(feature)
+    
     # Iris matching and evaluation 
     # run_recognition(
     #     train_features, train_labels,

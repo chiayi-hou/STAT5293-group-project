@@ -42,13 +42,12 @@ def get_features(img):
 
     return features
 
-def main(img):
+def feature_extraction(img, f=0.05):
 
     # size: 48 * 512
     roi = img[:48, :]
 
     filter_parms = [(3, 1.5), (4.5, 1.5)]
-    f = 0.05
 
     full_features = []
 

@@ -32,7 +32,7 @@ def histogram_equlization(img):
 
     return full_eq
 
-def main(img):
+def image_enhancement(img):
     img = img.astype(np.float32)
 
     # 4 * 32
@@ -51,10 +51,3 @@ def main(img):
     enhanced_img = histogram_equlization(corrected_img)
 
     return enhanced_img
-
-# Generate a random 64 x 512 grayscale image
-test_img = np.random.randint(
-    0, 256,
-    size=(64, 512),
-    dtype=np.uint8
-)
