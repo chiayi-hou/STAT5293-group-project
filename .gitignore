@@ -1,0 +1,13 @@
+# CASIA iris dataset
+CASIA Iris Image Database (version 1.0)/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated evaluation figures
+ROC_Curves.png
+LDA_Dimensions.png
+
+# Virtual environments
+.venv/

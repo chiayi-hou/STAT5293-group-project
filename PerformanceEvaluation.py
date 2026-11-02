@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+from IrisMatching import iris_matching
 
 """
 PerformanceEvaluation.py - Iris recognition evaluation.
@@ -31,6 +34,7 @@ def calculate_crr(true_labels, predicted_labels):
     crr = correct / total * 100
     return crr
 
+# TODO: NOT USED (currently). delete before submitting
 def evaluate_identification(true_labels, predictions):
     """
     Evaluate identification accuracy for three distance methods.
@@ -122,8 +126,9 @@ def calculate_roc(distances, same_class):
             distances, same_class, threshold)
         fmr_list.append(fmr)
         fnmr_list.append(fnmr)
-    return fmr_list, fnmr_list
+    return thresholds, fmr_list, fnmr_list
 
+# helper function for evaluate_verification
 def prepare_verification_data(distance_matrix, test_labels, classes):
     """
     Prepare genuine and impostor comparisons for verification.
@@ -149,7 +154,8 @@ def prepare_verification_data(distance_matrix, test_labels, classes):
             same_class.append(test_labels[i] == classes[j])
     return np.array(distances), np.array(same_class)
 
-def print_verification_table(fmr, fnmr, method):
+# helper function for evaluate_verification
+def print_verification_table(thresholds, fmr, fnmr, method):
     """
     Print FNMR at selected target FMR levels.
 
@@ -168,12 +174,16 @@ def print_verification_table(fmr, fnmr, method):
     fmr = np.array(fmr)
     fnmr = np.array(fnmr)
     target_fmr = [0.001, 0.01, 0.05, 0.10]
+
     print("\nVerification Results:", method)
-    print("FMR (%)     FNMR (%)")
+    print(f"{'Threshold':<15} {'FMR (%)':<15} {'FNMR (%)':<15}")
+
     for target in target_fmr:
         index = np.argmin(np.abs(fmr - target))
-        print(f"{fmr[index] * 100:.3f}"
-              f"       {fnmr[index] * 100:.3f}")
+
+        print(f"{thresholds[index]:<15.4f}"
+              f"{fmr[index] * 100:<15.3f}"
+              f"{fnmr[index] * 100:<15.3f}")
 
 def evaluate_verification(distance_matrices, test_labels, classes):
     """
@@ -198,11 +208,12 @@ def evaluate_verification(distance_matrices, test_labels, classes):
     plt.figure(figsize=(7, 5))
     for method in ["L1", "L2", "Cosine"]:
         distance_matrix = distance_matrices[method]
-        distances, same_class = prepare_verification_data(
-            distance_matrix, test_labels, classes)
-        fmr_list, fnmr_list = calculate_roc(distances, same_class)
-        print_verification_table(fmr_list, fnmr_list, method)
+        distances, same_class = prepare_verification_data(distance_matrix, test_labels, classes)
+        thresholds, fmr_list, fnmr_list = calculate_roc(distances, same_class)
+
+        print_verification_table(thresholds, fmr_list, fnmr_list, method)
         plt.plot(fmr_list, fnmr_list, label=method)
+        
     plt.xlabel("False Match Rate (FMR)")
     plt.ylabel("False Non-Match Rate (FNMR)")
     plt.title("ROC Curves - Iris Verification")
@@ -211,4 +222,53 @@ def evaluate_verification(distance_matrices, test_labels, classes):
     plt.savefig("ROC_Curves.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+def test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_labels, selected_dimension):
+    # Create Fig. 10: test out different lda dimension
+    dimensions = [10, 20, 40, 60, 80, 90, 100, 107]
+    methods = ["L1", "L2", "Cosine"]
+    results = {"L1": [], "L2": [], "Cosine": []}
 
+    # save matching results for final evaluation
+    final_predictions = None
+    final_distances = None
+
+    for n in tqdm(dimensions):
+        train_n = {angle: features[:, :n] for angle, features in dict_train_reduced.items()}
+        test_n = test_reduced[:, :n]
+
+        predictions, distances = iris_matching(train_n, train_labels, test_n)
+
+        # calculate CRR for each method
+        for method in methods:
+            crr = calculate_crr(test_labels, predictions[method])
+            results[method].append(crr)
+
+        # TODO: save the selected result for future comparison
+        if n == selected_dimension:
+            final_predictions = predictions
+            final_distances = distances
+
+    # Plot CRR against LDA dimensions
+    plt.figure(figsize=(8, 5))
+    for method in methods:
+        plt.plot(dimensions, results[method], marker="o", label=method)
+
+    plt.xlabel("Number of LDA Dimensions")
+    plt.ylabel("CRR (%)")
+    plt.title("Effect of LDA Dimensions on Iris Recognition")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("LDA_Dimensions.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    return final_predictions, final_distances
+
+def create_table_3(final_predictions, original_predictions, test_labels):
+    print("\nTable 3: Recognition Results")
+    print(f"{'Method':<12} {'Original (%)':<15} {'Reduced (%)':<15}")
+
+    for method in ["L1", "L2", "Cosine"]:
+        original_crr = calculate_crr(test_labels, original_predictions[method])
+        reduced_crr = calculate_crr(test_labels, final_predictions[method])
+
+        print(f"{method:<12} {original_crr:<15.2f} {reduced_crr:<15.2f}")

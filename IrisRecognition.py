@@ -2,14 +2,14 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
-from IrisLocalization import (IrisLocalization,ImageQualityAssessment,fit_thresholds,is_qualified)
+from IrisLocalization import (IrisLocalization,ImageQualityAssessment,is_qualified)
 from IrisNormalization import IrisNormalization
 from ImageEnhancement import image_enhancement
 from FeatureExtraction import feature_extraction
-from IrisMatching import (iris_matching,iris_matching_rotation,fisher_lda,
-                          calculate_centers,calculate_distance_matrix,compare_features)
-from PerformanceEvaluation import (evaluate_identification,evaluate_verification)
+from IrisMatching import (iris_matching, fit_fisher_lda)
+from PerformanceEvaluation import (evaluate_verification, test_dimensionality, create_table_3)
 
 """
 IrisRecognition.py - Main program for iris recognition.
@@ -114,165 +114,29 @@ def count_qualified_images(descriptors, thresholds):
             count += 1
     return count
 
-# get image features:已修改/加入angle参数-待确认！
-def get_img_features(img_files, f=0.05,angle=0):
-    """
-    Extract a 1536-dimensional feature vector from each image.
+def get_features(img_paths, is_training, f=0.05):
+    if is_training:
+        angles = [-9, -6, -3, 0, 3, 6, 9]
+    else:
+        angles = [0]
 
-    img_files: list of iris image paths.
-    f: frequency parameter for feature extraction (default 0.05).
-    angle: initial normalization angle in degrees (default 0).
-    img: input grayscale image.
-    pupil, iris: boundaries detected by IrisLocalization.
-    normalized_img: iris image mapped to polar coordinates.
-    enhanced_img: normalized image after enhancement.
-    feature: extracted iris feature vector.
-    img_features: feature vectors collected from all images.
+    all_features = {angle: [] for angle in angles}
+    for file_path in tqdm(img_paths, desc="Extracting training features" if is_training else "Extracting testing features"):
+        img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+        pupil, iris = IrisLocalization(img)
 
-    The loop processes images one by one through localization,
-    normalization, enhancement, and feature extraction.
-    The result is an array with one feature vector per image.
-    """
-    img_features = []
-    for file_path in img_files:
-        img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE) # Read image as grayscale
+        for angle in angles:
+            normalized_img = IrisNormalization(img, pupil, iris, init_angle_deg=angle)
+            enhanced_img = image_enhancement(normalized_img)
+            feature = feature_extraction(enhanced_img, f)
 
-        if img is None:
-            raise ValueError("Cannot read image: " + file_path)
-        
-        pupil, iris = IrisLocalization(img) # Iris Localization
-        normalized_img = IrisNormalization(img, pupil, iris, init_angle_deg=angle) # Iris Normalization
-        enhanced_img = image_enhancement(normalized_img) # Image Enhancement
-        feature = feature_extraction(enhanced_img, f) # Feature Extraction
-        img_features.append(feature)
-    return np.array(img_features)
+            all_features[angle].append(feature)
 
-# rotation task
-def get_rotated_features(img_files,zero_features):
-    """
-    Extract iris features at seven normalization angles.
-
-    img_files: paths of the test images.
-    zero_features: previously extracted features at 0 degrees.
-    angles: seven rotation angles from -9 to 9 degrees.
-    rotated_features: dictionary mapping each angle to
-                      its corresponding feature matrix.
-
-    The loop processes each angle. At 0 degrees, existing
-    features are reused to avoid repeated computation.
-    At other angles, features are extracted again using
-    the specified normalization angle.
-    """
-    angles = [-9, -6, -3, 0, 3, 6, 9]
-    rotated_features = {}
+    # Convert lists into NumPy arrays
     for angle in angles:
-        if angle == 0:
-            rotated_features[angle] = zero_features
-        else:
-            rotated_features[angle] = get_img_features(img_files, angle=angle)
-    return rotated_features
+        all_features[angle] = np.array(all_features[angle])
 
-# Iris recognition and evaluation
-def run_recognition(train_features, train_labels,test_features, test_labels):
-    """
-    Run iris matching and evaluate identification and verification.
-
-    train_features, test_features: iris feature matrices.
-    train_labels, test_labels: corresponding class ID arrays.
-    predictions: predicted iris classes for each distance method.
-    distances: test-to-class-center distance matrices.
-    classes: unique iris class IDs in the training set.
-    crr_results: identification accuracy for L1, L2, and Cosine.
-
-    iris_matching performs LDA and nearest-center matching.
-    Identification evaluates the predicted class labels.
-    Verification evaluates matching distances using FMR/FNMR.
-    """
-    # Iris matching
-    predictions, distances = iris_matching(
-        train_features, train_labels, test_features)
-
-    # identification evaluation
-    print("\nIdentification Results:")
-    crr_results = evaluate_identification(
-        test_labels, predictions)
-
-    # verification evaluation
-    classes = np.unique(train_labels)
-    print("\nVerification Results:")
-    evaluate_verification(distances, test_labels, classes)
-    return crr_results
-
-# comparison
-def compare_original_and_lda(train_features, train_labels,test_features, test_labels):
-    """
-    Compare recognition accuracy before and after Fisher LDA.
-
-    train_features, test_features: original feature matrices.
-    train_labels, test_labels: true iris class IDs.
-    original: CRR results using original 1536-D features.
-    lda: CRR results using LDA-reduced features.
-    method: one of L1, L2, or Cosine.
-
-    The loop prints the original and LDA recognition rates
-    for each distance measure.
-    """
-    original, lda = compare_features(
-        train_features, train_labels,test_features, test_labels)
-    print("\nOriginal vs LDA Features:")
-    print("Method     Original CRR    LDA CRR")
-    for method in ["L1", "L2", "Cosine"]:
-        print(f"{method:<10} {original[method]:.2f}%"
-              f"          {lda[method]:.2f}%")
-
-def compare_lda_dimensions(train_features, train_labels,test_features, test_labels):
-    """
-    Study how LDA dimensions affect iris recognition accuracy.
-
-    dimensions: tested numbers of LDA components.
-    n: current number of LDA dimensions.
-    train_reduced, test_reduced: LDA-transformed features.
-    classes: unique iris class IDs.
-    centers: mean feature vector for each iris class.
-    distances: distances from test samples to class centers.
-    predictions: nearest-center class predictions.
-    crr: correct recognition rate in percentage.
-    results: CRR values for each method and dimension.
-
-    The outer loop tests each LDA dimension. The inner loop
-    evaluates L1, L2, and Cosine distances. Results are
-    plotted and saved as LDA_Dimensions.png.
-
-    With 108 classes, LDA supports at most 107 components.
-    """
-    dimensions = [10, 20, 40, 60, 80, 100, 107]
-    results = {"L1": [], "L2": [], "Cosine": []}
-
-    for n in dimensions:
-        train_reduced, test_reduced = fisher_lda(
-            train_features, train_labels,
-            test_features, n_components=n)
-
-        classes, centers = calculate_centers(train_reduced, train_labels)
-        for method in ["L1", "L2", "Cosine"]:
-            distances = calculate_distance_matrix(test_reduced, centers, method)
-            predictions = classes[np.argmin(distances, axis=1)]
-            crr = np.mean(predictions == test_labels) * 100
-            results[method].append(crr)
-        print("Completed dimension:", n)
-    plt.figure(figsize=(8, 5))
-
-    for method in ["L1", "L2", "Cosine"]:
-        plt.plot(dimensions, results[method],marker="o", label=method)
-
-    plt.xlabel("Number of LDA Dimensions")
-    plt.ylabel("CRR (%)")
-    plt.title("Effect of LDA Dimensions on Iris Recognition")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig("LDA_Dimensions.png",dpi=300, bbox_inches="tight")
-    plt.close()
-
+    return all_features
 
 # Main execution:
 # This block runs only when IrisRecognition.py is executed directly.
@@ -294,63 +158,55 @@ def compare_lda_dimensions(train_features, train_labels,test_features, test_labe
 if __name__ == "__main__":
     data_path = "CASIA Iris Image Database (version 1.0)" # dataset folder
 
-    # 1. load dataset
+    # load dataset
     train_files, train_labels, test_files, test_labels = (load_dataset(data_path))
     print("Training images:", len(train_files))
     print("Testing images:", len(test_files))
     print("Number of classes:", len(set(train_labels)))
 
     # 2. image quality assessment 
-    print("\nAssessing image quality...")
-    train_descriptors = assess_image_quality(train_files)
-    test_descriptors = assess_image_quality(test_files)
+    #print("\nAssessing image quality...")
+    #train_descriptors = assess_image_quality(train_files)
+    #test_descriptors = assess_image_quality(test_files)
 
-    thresholds = fit_thresholds(train_descriptors)
-    print("Quality thresholds:", thresholds)
+    #thresholds = fit_thresholds(train_descriptors)
+    #print("Quality thresholds:", thresholds)
 
-    train_qualified = count_qualified_images(train_descriptors, thresholds)
-    test_qualified = count_qualified_images(test_descriptors, thresholds)
-    print("Qualified training images:", train_qualified)
-    print("Qualified testing images:", test_qualified)
+    #train_qualified = count_qualified_images(train_descriptors, thresholds)
+    #test_qualified = count_qualified_images(test_descriptors, thresholds)
+    #print("Qualified training images:", train_qualified)
+    #print("Qualified testing images:", test_qualified)
 
-    # 3. image preprocessing and feature extraction 
+    # Image preprocessing and feature extraction 
+    # {angle: np.array,}
     print("\nExtracting features...")
-    train_features = get_img_features(train_files)
-    test_features = get_img_features(test_files)
-    print("Training feature shape:", train_features.shape)
-    print("Testing feature shape:", test_features.shape)
+    train_features = get_features(train_files, is_training=True)
+    test_features = get_features(test_files, is_training=False)
 
-    # seven-angle rotation compensation test
-    print("\nExtracting rotated testing features...")
-    rotated_test_features = get_rotated_features(test_files,test_features)
-    print("Rotation angles:", list(rotated_test_features.keys()))
-    print("0 degree shape:", rotated_test_features[0].shape)
+    # Fisher LDA
+    print("\n Fitting Fisher LDA")
+    lda_matrix, dict_train_reduced = fit_fisher_lda(train_features, train_labels)
+    test_reduced = lda_matrix.transform(test_features[0])
 
-    # check feature dimensions and values
-    assert train_features.shape == (len(train_labels), 1536)
-    assert test_features.shape == (len(test_labels), 1536)
-    assert np.all(np.isfinite(train_features))
-    assert np.all(np.isfinite(test_features))
+    # Create Fig. 10: test out different lda dimension
+    print("\n Creating Fig. 10 (try out different LDA dimension)")
+    dimensions = [10, 20, 40, 60, 80, 90, 100, 107]
+    methods = ["L1", "L2", "Cosine"]
+    results = {"L1": [], "L2": [], "Cosine": []}
+
+    # save matching results for final evaluation
+    final_predictions, final_distances = test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_labels, selected_dimension=100)
+  
+    # Create Table 3: compare original result and lda result
+    print("\n Creating Table 3: compare original result and LDA result")
+    original_predictions, _ = iris_matching(train_features, train_labels, test_features[0])
+    create_table_3(final_predictions, original_predictions, test_labels)
+
+    # Verification
+    classes = np.unique(train_labels)
+    print("\nVerification Results:")
+    evaluate_verification(final_distances, test_labels, classes)
     
-    # 4. Iris matching and evaluation 
-    run_recognition(train_features, train_labels,test_features, test_labels)
-
-    # rotation compensation
-    rotation_predictions, rotation_distances = iris_matching_rotation(train_features,
-                                                                      np.array(train_labels),
-                                                                      rotated_test_features)
-    print("\nFull Dataset Rotation Matching Results:")
-    for method in ["L1", "L2", "Cosine"]:
-        crr = np.mean(
-            rotation_predictions[method] == np.array(test_labels)) * 100
-        print(method, "Rotation CRR:", round(crr, 2), "%")
-
-    # 5. comparison
-    compare_original_and_lda(train_features, train_labels,test_features, test_labels)
-
-    # compare different LDA dimensions
-    compare_lda_dimensions(train_features, train_labels,test_features, test_labels)
-
 
 
 

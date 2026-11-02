@@ -95,32 +95,30 @@ def calculate_distance_matrix(test_features, centers, method):
         distances.append(row)
     return np.array(distances)
 
-# Fisher LDA：higher dimension to lower dimension
-def fisher_lda(train_features, train_labels, test_features,n_components=None):
-    """
-    Reduce feature dimensions using Fisher LDA.
+def fit_fisher_lda(train_features_dict, train_labels, n_components=None):
+    angles = [-9, -6, -3, 0, 3, 6, 9]
 
-    train_features: original training feature matrix.
-    train_labels: training class IDs.
-    test_features: original test feature matrix.
-    n_components: number of output dimensions; None uses
-                  the maximum available LDA dimensions.
-    lda: fitted LinearDiscriminantAnalysis model.
-    train_reduced: transformed training features.
-    test_reduced: transformed testing features.
+    # Combine features from all angles
+    X_train = np.concatenate([train_features_dict[angle] for angle in angles], axis=0)
+    # Repeat labels for all angles
+    y_train = np.tile(train_labels, len(angles))
 
-    LDA learns a discriminative projection using training
-    data and labels. The same projection is applied to
-    test data without refitting, avoiding test-data leakage.
-    The SVD solver is used.
-    """
-    lda = LinearDiscriminantAnalysis(n_components=n_components,solver="svd")
-    train_reduced = lda.fit_transform(train_features, train_labels)
-    test_reduced = lda.transform(test_features)
-    return train_reduced, test_reduced
+    # Fit one LDA model
+    lda = LinearDiscriminantAnalysis(
+        n_components=n_components,
+        solver="svd"
+    )
+
+    X_train_reduced = lda.fit_transform(X_train, y_train)
+
+    # split back to 7 anlges
+    reduced_parts = np.split(X_train_reduced, len(angles), axis=0)
+    dict_train_reduced = {angle: features for angle, features in zip(angles, reduced_parts)}
+
+    return lda, dict_train_reduced
 
 # combing matching functions
-def iris_matching(train_features, train_labels, test_features):
+def iris_matching(dict_train, train_labels, test_features):
     """
     Perform iris identification using Fisher LDA and class centers.
 
@@ -141,129 +139,37 @@ def iris_matching(train_features, train_labels, test_features):
     The inner loop assigns each test sample to its closest
     class center using the minimum distance.
     """
-    # 1: Fisher LDA
-    train_reduced, test_reduced = fisher_lda(
-        train_features, train_labels, test_features)
 
-    # 2: calculate class centers
-    classes, centers = calculate_centers(
-        train_reduced, train_labels)
+    # calculate class centers
+    #classes, centers = calculate_centers(dict_train_reduced, train_labels)
+    rotation_centers = {}
 
-    # 3: matching using three distance methods
+    for angle, features in dict_train.items():
+        classes, centers = calculate_centers(features, train_labels)
+        rotation_centers[angle] = centers
+
     predictions = {}
     distances = {}
     for method in ["L1", "L2", "Cosine"]:
-        distance_matrix = calculate_distance_matrix(
-            test_reduced, centers, method)
-        predicted_labels = []
-
-        for row in distance_matrix:
-            nearest_index = np.argmin(row)
-            predicted_labels.append(classes[nearest_index])
-
-        predictions[method] = np.array(predicted_labels)
-        distances[method] = distance_matrix
-    return predictions, distances
-
-# rotation task
-def iris_matching_rotation(train_features, train_labels,rotated_test_features):
-    """
-    Match iris images using seven-angle rotation compensation.
-
-    train_features: original training feature matrix.
-    train_labels: training class IDs.
-    rotated_test_features: dictionary of test features by angle.
-    lda: LDA model fitted on training features only.
-    train_reduced: LDA-transformed training features.
-    classes, centers: class IDs and their feature centers.
-    method: L1, L2, or Cosine.
-    angle: one of -9, -6, -3, 0, 3, 6, or 9 degrees.
-    test_reduced: transformed test features at one angle.
-    distances: distance matrix for the current angle.
-    best_distances: minimum distances across all angles.
-    predictions: predicted classes from minimum distances.
-    results: predicted labels for each distance method.
-    distance_matrices: final minimum-distance matrices.
-
-    LDA is fitted once using training data.
-    The outer loop evaluates each distance method.
-    The inner loop transforms features at seven angles
-    using the same LDA model and calculates distances.
-    np.minimum keeps the smallest distance for each
-    test-image/class pair across the seven angles.
-    The nearest class center determines the final prediction.
-    """
-    # Fit LDA using training features only
-    lda = LinearDiscriminantAnalysis(solver="svd")
-    train_reduced = lda.fit_transform(train_features, train_labels)
-
-    # Calculate class centers
-    classes, centers = calculate_centers(train_reduced, train_labels)
-    results = {}
-    distance_matrices = {}
-
-    for method in ["L1", "L2", "Cosine"]:
         best_distances = None
-        for angle in [-9, -6, -3, 0, 3, 6, 9]:
-            # Transform rotated features using the same LDA
-            test_reduced = lda.transform(rotated_test_features[angle])
-            distances = calculate_distance_matrix(test_reduced,centers,method)
-           
+
+        # Compare against centers of all seven angles
+        for angle, centers in rotation_centers.items():
+            distance_matrix = calculate_distance_matrix(test_features, centers, method)
+
+            # save the value with the smallest distance 
+            # reference: "the minimum of the seven scores is taken as the final matching distance"
             if best_distances is None:
-                best_distances = distances
+                best_distances = distance_matrix
             else:
-                best_distances = np.minimum(best_distances, distances)
-        predictions = classes[np.argmin(best_distances, axis=1)]
-        results[method] = predictions
-        distance_matrices[method] = best_distances
-    return results, distance_matrices
+                best_distances = np.minimum(best_distances, distance_matrix)
 
-# comparison
-def compare_features(train_features, train_labels, test_features, 
-                     test_labels,n_components=None):
-    """
-    Compare nearest-center recognition with and without LDA.
+        # Find the nearest class
+        smallest_idx = np.argmin(best_distances, axis=1)
+        predicted_labels = classes[smallest_idx]
 
-    train_features, test_features: original feature matrices.
-    train_labels, test_labels: true iris class IDs.
-    n_components: optional number of LDA dimensions.
-    classes, centers: class IDs and class mean vectors.
-    original_results: CRR using original feature vectors.
-    train_reduced, test_reduced: LDA-transformed features.
-    lda_results: CRR using reduced feature vectors.
-    distances: test-to-center distance matrix.
-    predictions: nearest-center class predictions.
+        predictions[method] = predicted_labels
+        distances[method] = best_distances
 
-    The first loop evaluates L1, L2, and Cosine using
-    original features. The second loop repeats the
-    evaluation after Fisher LDA dimensionality reduction.
-    """
-    # Original features
-    classes, centers = calculate_centers(train_features, train_labels)
-    original_results = {}
-
-    for method in ["L1", "L2", "Cosine"]:
-        distances = calculate_distance_matrix(test_features, centers, method)
-        predictions = classes[np.argmin(distances, axis=1)]
-        original_results[method] = (np.mean(predictions == test_labels) * 100)
-
-    # LDA features
-    train_reduced, test_reduced = fisher_lda(train_features, train_labels, 
-                                             test_features,n_components=n_components)
-    classes, centers = calculate_centers(train_reduced, train_labels)
-    lda_results = {}
-
-    for method in ["L1", "L2", "Cosine"]:
-        distances = calculate_distance_matrix(test_reduced, centers, method)
-        predictions = classes[np.argmin(distances, axis=1)]
-        lda_results[method] = (np.mean(predictions == test_labels) * 100)
-    return original_results, lda_results
-
-
-
-    
-
-   
-
-
+    return predictions, distances
 

@@ -1,0 +1,15 @@
+
+[project]
+name = "iris-recognition"
+version = "0.1.0"
+description = "STAT GR5293 Iris Recognition Group Project"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "scikit-image",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+    "tqdm>=4.70.1",
+]
