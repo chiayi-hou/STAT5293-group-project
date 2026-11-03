@@ -7,6 +7,11 @@ M_ROWS = 64
 N_COLS = 512
 
 def IrisNormalization(img, pupil, iris, M=M_ROWS, N=N_COLS, init_angle_deg=0.0):
+    #img: the original gray eye image
+    #pupil: (xp, yp, rp), the pupil circle found by IrisLocalization
+    #iris: (xi, yi, ri), the outer iris circle found by IrisLocalization
+    #M, N: output size (64 rows, 512 columns by default)
+    #init_angle_deg: where the unwrapping starts, in degrees. Shifting the start angle is the same as rotating the eye
 
     xp, yp, rp = pupil
     xi, yi, ri = iris

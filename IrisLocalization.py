@@ -24,8 +24,8 @@ def estimate_center_by_projection(img):
     column_sums = np.sum(img, axis=0)
     row_sums = np.sum(img, axis=1)
 
-    xp = int(np.argmin(column_sums))
-    yp = int(np.argmin(row_sums))
+    xp = int(np.argmin(column_sums)) #position of the smallest column total
+    yp = int(np.argmin(row_sums)) #position of the smallest row total
     return xp, yp
 
 
@@ -35,16 +35,17 @@ def crop_box(img, xc, yc, size):
     if height < size or width < size:
         raise ValueError("The image is smaller than the requested square.")
 
-    x0 = int(round(xc)) - size // 2
-    y0 = int(round(yc)) - size // 2
-    x0 = max(0, min(x0, width - size))
-    y0 = max(0, min(y0, height - size))
+    x0 = int(round(xc)) - size // 2 #half a box to the left of the center
+    y0 = int(round(yc)) - size // 2 #half a box above the center
+    x0 = max(0, min(x0, width - size)) #keep the box inside left or right edges
+    y0 = max(0, min(y0, height - size)) #keep the box inside top or bottom edges
     return x0, y0
 
 
 def histogram_threshold(region, offset=HIST_OFFSET):
     #Choose a threshold from the dark part of the local histogram
-    histogram = np.bincount(region.flatten(), minlength=256)
+    histogram = np.bincount(region.flatten(), minlength=256) #pixel count per grey level 0..255
+    #Only grey levels 0..99 are searched, so a big bright area (skin, white of the eye) can never be mistaken for the pupil. Pupils in dataset are 33...64
     pupil_peak = int(np.argmax(histogram[:100])) #!!!Here choose 100 as the threshold for dark, could change according to real result!!!
     threshold = pupil_peak + offset
     return threshold
@@ -52,10 +53,11 @@ def histogram_threshold(region, offset=HIST_OFFSET):
 
 def refine_center_by_binarization(img, xc, yc, size=REGION_SIZE):
     #Step 2: use the binary region's centroid and area
+    #(xc, yc): the current guess of the pupil center
     x0, y0 = crop_box(img, xc, yc, size)
     region = img[y0:y0 + size, x0:x0 + size]
     threshold = histogram_threshold(region)
-    binary = (region <= threshold).astype(np.uint8)
+    binary = (region <= threshold).astype(np.uint8) #1 = dark enough to be pupil
 
     square = np.ones((OPEN_SIZE, OPEN_SIZE), np.uint8)
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, square) #remove eyelashes
@@ -76,8 +78,12 @@ def refine_center_by_binarization(img, xc, yc, size=REGION_SIZE):
 
 def hough_best_circle(edges, radii, center_box):
     #Find the circle with the largest Hough vote in the center box
+    #edges: black-and-white edge map from Canny (True = edge pixel)
+    #radii: list of radii to try
+    #center_box: (xmin, xmax, ymin, ymax), the area where the circle's center is allowed to be
     height, width = edges.shape
     xmin, xmax, ymin, ymax = center_box
+    #Keep the allowed box inside the edge map
     xmin = max(0, xmin)
     xmax = min(width - 1, xmax)
     ymin = max(0, ymin)
@@ -86,7 +92,7 @@ def hough_best_circle(edges, radii, center_box):
     if xmin > xmax or ymin > ymax or len(radii) == 0:
         raise ValueError("The circle search region is empty.")
 
-    votes = hough_circle(edges, radii)
+    votes = hough_circle(edges, radii) #votes[i] is the vote image for radius radii[i]
     best_vote = 0.0
     best_circle = None
 
@@ -98,9 +104,9 @@ def hough_best_circle(edges, radii, center_box):
         column = position % local_votes.shape[1]
         vote = local_votes[row, column]
 
-        if vote > best_vote:
+        if vote > best_vote: #keep this circle if it beats the best one found so far
             best_vote = vote
-            x = xmin + column
+            x = xmin + column #convert box position back to edge-map position
             y = ymin + row
             radius = radii[i]
             best_circle = (float(x), float(y), float(radius))
@@ -112,7 +118,8 @@ def hough_best_circle(edges, radii, center_box):
 
 def detect_pupil_circle(img, xc, yc, rough_radius):
     #Step 3: refine the pupil using Canny edges and circular Hough votes
-    size = REGION_SIZE + 20
+    #(xc, yc), rough_radius: the estimates from step 2
+    size = REGION_SIZE + 20 #a box a little bigger than in step 2
     x0, y0 = crop_box(img, xc, yc, size)
     region = img[y0:y0 + size, x0:x0 + size]
     edges = canny(region, sigma=CANNY_SIGMA)
@@ -131,8 +138,9 @@ def detect_pupil_circle(img, xc, yc, rough_radius):
     return x + x0, y + y0, radius
 
 
-def detect_iris_circle(img, pupil):
+def detect_iris_circle(img, pupil): 
     #Step 3: search for the outer boundary near the pupil center
+    #pupil: (xp, yp, pupil_radius) from detect_pupil_circle
     xp, yp, pupil_radius = pupil
     height, width = img.shape
     half_size = IRIS_R_MAX + IRIS_CENTER_SEARCH + 5
@@ -160,6 +168,7 @@ def detect_iris_circle(img, pupil):
 
 
 def IrisLocalization(img):
+    #img : gray eye image (8-bit)
     if img is None:
         raise ValueError("The image could not be read.")
     if img.ndim == 3:
@@ -184,6 +193,8 @@ def IrisLocalization(img):
 PATCH = 64
 BANDS = [(0, 6), (6, 22), (22, 32)]
 
+
+#Image Quality Assessment (Section 3.1 from paper)
 def quality_descriptor(patch):
     #Compute D = [F1 + F2 + F3, F2 / (F1 + F3)] from Equation (1).
     if patch.shape != (PATCH, PATCH):
@@ -210,9 +221,9 @@ def quality_descriptor(patch):
                 if lower < radius <= upper:
                     band_totals[band] += spectrum[row, column]
 
-    F1 = band_totals[0]
-    F2 = band_totals[1]
-    F3 = band_totals[2]
+    F1 = band_totals[0] #low
+    F2 = band_totals[1] #middle
+    F3 = band_totals[2] #high
     if F1 + F3 == 0:
         raise ValueError("The quality ratio is undefined for this patch.")
 
@@ -241,6 +252,10 @@ def iris_patches(img, xp, yp, rp):
     return patches
 
 def ImageQualityAssessment(img):
+    #Main function for quality assessment
+    #1. Rough pupil location, using steps 1-2 of the localization above
+    #2. Two 64 x 64 patches beside the pupil
+    #3. Quality descriptor of each patch, then the average of the two
     #Return the mean local descriptor and the rough pupil circle
     if img is None:
         raise ValueError("The image could not be read.")
@@ -265,6 +280,11 @@ def ImageQualityAssessment(img):
 DEFAULT_THRESHOLDS = {"max_total_power": 2.44e6, "min_ratio": 0.695}
 
 def fit_thresholds(D_train, k_power=4.0, k_ratio=3.0):
+    #Learn the normal range of D from training images
+    #D_train: one row [total power, middle ratio] per training image
+    #k_power: how many spreads above normal counts as occluded
+    #k_ratio: how many spreads below normal counts as blurred
+
     D_train = np.array(D_train, dtype=float)
     power = D_train[:, 0] #first column: total power
     ratio = D_train[:, 1] #second column: middle-frequency ratio
@@ -280,6 +300,7 @@ def fit_thresholds(D_train, k_power=4.0, k_ratio=3.0):
 
 
 def is_qualified(D, thresholds=DEFAULT_THRESHOLDS):
+    #D: [total power, middle ratio] from ImageQualityAssessment
     total_power = D[0]
     middle_ratio = D[1]
     if total_power > thresholds["max_total_power"]:
