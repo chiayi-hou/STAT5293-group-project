@@ -1,8 +1,9 @@
 """
 Step 4: Feature Extraction (section 3.3):
-Include functions for iris feature extraction using the spatial filter bank proposed by Ma et al. (2003).
+Include functions for iris feature extraction using the spatial filter proposed by Ma et al. (2003).
 Take normalized and enhanced iris image as input (shape 64*512) and extract 1536 features for each image.
 """
+
 import numpy as np
 import cv2 as cv
 
