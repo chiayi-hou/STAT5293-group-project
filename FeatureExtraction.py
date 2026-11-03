@@ -108,7 +108,7 @@ def feature_extraction(img, f=0.05):
     Args:
         img (np.ndarray): normalized and enhanced grayscale iris image (shape=64*512)
         f (float): cosine frequency passed to create_filter. A larger f captures high-frequency patterns better, and a lower f captures lower ones better.  
-                           0.05 <= f <= 0.4 has been explored in previous Gabor-based texture analysis research.
+                   0.05 <= f <= 0.4 has been explored in previous Gabor-based texture analysis research.
 
     Return:
         full_features (np.array): extracted 1536 features from the normalized, enhanced iris image.

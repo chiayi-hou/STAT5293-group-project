@@ -222,9 +222,28 @@ def evaluate_verification(distance_matrices, test_labels, classes):
     plt.savefig("ROC_Curves.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+# one of the main functions to be import to IrisRecognition.py
 def test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_labels, selected_dimension):
-    # Create Fig. 10: test out different lda dimension
+    """
+    Test out different dimensions for features reduction and do iris matching to compare results. 
+    Create Fig. 10 in Ma et al. and save the figure as "LDA_Dimensions.png"
+
+    Args:
+        dict_train_reduced (dict): a dictionary of np.ndarrays that save reduced features (107 dimesion) for training data
+                                   keys are the 7 angles for image rotation. 
+        train_labels (np.array): contains all true labels for the training set
+        test_reduced (np.ndarray): np.ndarrays that save reduced features (107 dimesion) for testing data (at angle 0)
+        test_labels (np.array): contains all true labels for the testing set
+        selected_dimension (int): the function will return the prediction and distance result for the selected dimension for future comparison
+
+    Returns:
+        final_predictions
+        final_distances
+
+    """
+    # Ma et al. tried on roughly every 20 dimension. As we only have at most 107 dimension, we add few dimensions to try out to compare the result
     dimensions = [10, 20, 40, 60, 80, 90, 100, 107]
+
     methods = ["L1", "L2", "Cosine"]
     results = {"L1": [], "L2": [], "Cosine": []}
 
@@ -263,6 +282,7 @@ def test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_lab
 
     return final_predictions, final_distances
 
+# one of the main functions to be import to IrisRecognition.py
 def create_table_3(final_predictions, original_predictions, test_labels):
     print("\nTable 3: Recognition Results")
     print(f"{'Method':<12} {'Original (%)':<15} {'Reduced (%)':<15}")
