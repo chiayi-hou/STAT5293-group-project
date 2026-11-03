@@ -98,80 +98,104 @@ def calculate_distance_matrix(test_features, centers, method):
 # one of the main functions to be imported to IrisRecognition.py
 def fit_fisher_lda(train_features_dict, train_labels, n_components=None):
     """
-    
+    Fit Fisher LDA model with given training features and labels. Transform the original training features into lower dimensional features (n_components).
+
+    Args:
+        train_features_dict (dict): Dictionary containing the extracted training features.
+                                    Keys are the 7 rotation angles (-9, -6, -3, 0, 3, 6, 9), and values are np.ndarray with shape (324, 1536) for each angle.
+        train_labels (np.array): true labels for the training images
+        n_components (int): Number of LDA dimensions to retain. Default is None; in this case, the reduced dimension would be 107.
+
+    Returns:
+        lda (LinearDiscriminantAnalysis): Fitted Fisher LDA model
+        dict_train_reduced (dict): Dictionary containing the LDA-transformed training features.
+                                    Keys are the 7 rotation angles, and values are np.ndarray with shape (324, n) for each angle.
     """
     angles = [-9, -6, -3, 0, 3, 6, 9]
 
-    # Combine features from all angles
-    X_train = np.concatenate([train_features_dict[angle] for angle in angles], axis=0)
+    # concatenate features from all angles into one big array (to fit the LDA)
+    X_train = np.concatenate([train_features_dict[angle] for angle in angles], axis=0)     
     # Repeat labels for all angles
     y_train = np.tile(train_labels, len(angles))
 
-    # Fit one LDA model
-    lda = LinearDiscriminantAnalysis(
-        n_components=n_components,
-        solver="svd"
-    )
+    # create a LDA model
+    lda = LinearDiscriminantAnalysis(n_components=n_components, solver="svd")
 
+    # fit the lda model with training data
+    # at the same time, transform the X_train features to lower dimension (X_train_reduced)
     X_train_reduced = lda.fit_transform(X_train, y_train)
 
-    # split back to 7 anlges
+    # split the transformed big array X_train_reduced back to 7 angles
+    # each containing 324 training images with n LDA components.
     reduced_parts = np.split(X_train_reduced, len(angles), axis=0)
+    # reorganize back to the original format
     dict_train_reduced = {angle: features for angle, features in zip(angles, reduced_parts)}
 
     return lda, dict_train_reduced
 
-# combing matching functions
+# one of the main functions to be imported to IrisRecognition.py
 def iris_matching(dict_train, train_labels, test_features):
     """
-    Perform iris identification using Fisher LDA and class centers.
+    Perform iris matching using three matching methods (L1, L2, and Cosine).
+    For each class, calculate 7 centers from the training features at different rotation angles. Compare each testing image with the centers and select
+    the smallest distance among the 7 angles as the final distance for each class.
 
-    train_features, test_features: original feature matrices.
-    train_labels: known training class IDs.
-    train_reduced, test_reduced: LDA-transformed features.
-    classes, centers: iris classes and their mean vectors.
-    predictions: dictionary of predicted labels by method.
-    distances: dictionary of distance matrices by method.
-    distance_matrix: distances from test samples to centers.
-    row: distances for one test sample.
-    nearest_index: index of the smallest distance.
-    predicted_labels: predicted classes for one method.
-
-    First, LDA reduces feature dimensions using training data.
-    Next, class centers are calculated.
-    The outer loop evaluates the three distance methods.
-    The inner loop assigns each test sample to its closest
-    class center using the minimum distance.
+    Args:
+        dict_train (dict):  dictionary containing training features.
+                            Keys are the 7 rotation angles, and values are np.ndarray with shape (324, n).
+                            n can be 1536 for original features or the number of dimensions retained after Fisher LDA.
+        train_labels (np.ndarray): true labels for the 324 training images.
+        test_features (np.ndarray): testing features with shape (432, n). Must have the same feature dimensions as the training features.
+   
+    Returns:
+        predictions (dict): dictionary that contains predicted class labels for L1, L2, and Cosine.
+                            Each value is an np.ndarray with shape (432,).
+        distances (dict): dictionary that contains the representing matching distances between testing images and the 108 iris classes.
+                          Keys are L1, L2, and Cosine, and each value is an np.ndarray with shape (432, 108).
     """
 
-    # calculate class centers
-    #classes, centers = calculate_centers(dict_train_reduced, train_labels)
+    # Ma et al. suggests to create 7 templates for each class, so we will find centers among 3 training features for each angle
+    # rotation_centers would be used to save the angles and their corresponding centers 
     rotation_centers = {}
 
+    # loop through each angle and its corresponding feature array to calculate centers
     for angle, features in dict_train.items():
+        # classes is an array containing the 108 iris class IDs
+        # centers is an array of the center for each class for the current angle
         classes, centers = calculate_centers(features, train_labels)
+        # save the centers to the dictionary
         rotation_centers[angle] = centers
 
+    # empty dictionaries to save predictions and distances between testing and training centers
+    # keys are the name of the matching methods ("L1", "L2", "Cosine")
     predictions = {}
     distances = {}
+    # loop through each matching method and do iris matching
     for method in ["L1", "L2", "Cosine"]:
+        # Ma et al. selected the smallest distance among the 7 angle centers as the representation
+        # keep track of the best distance as representation. The best distance would be the smallest distance among the 7 angles
         best_distances = None
 
-        # Compare against centers of all seven angles
+        # loop through each angle and compare distance
         for angle, centers in rotation_centers.items():
+            # calculate distance matrix
             distance_matrix = calculate_distance_matrix(test_features, centers, method)
 
             # save the value with the smallest distance 
             # reference: "the minimum of the seven scores is taken as the final matching distance"
             if best_distances is None:
+                # initialize the best_distances for the first round
                 best_distances = distance_matrix
             else:
+                # update elements that have a smaller value accross rotation angles to best_distances
                 best_distances = np.minimum(best_distances, distance_matrix)
 
-        # Find the nearest class
+        # select the class with the smallest matching distance for each testing image.
+        # use smallest_idx to select the class as predicted_labels
         smallest_idx = np.argmin(best_distances, axis=1)
         predicted_labels = classes[smallest_idx]
 
+        # save the predictions and the matching distance matrices to the dictionaries
         predictions[method] = predicted_labels
         distances[method] = best_distances
 
