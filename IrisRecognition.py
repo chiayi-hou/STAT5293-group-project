@@ -235,7 +235,7 @@ if __name__ == "__main__":
     # create table to compare results between original features and the 100-dimensional features
     create_table_3(final_predictions, original_predictions, test_labels)
 
-    # Verification
+    # Verification (Create Table 4 and Fig. 11)
     classes = np.unique(train_labels)
     print("\nVerification Results:")
     evaluate_verification(final_distances, test_labels, classes)
