@@ -18,6 +18,9 @@ def create_filter(delta_x, delta_y, f):
         f (float): control the spatial frequency in m1 (the second part of the function). 
                    A larger f captures high-frequency patterns better, and a lower f captures lower ones better.  
                    0.05 <= f <= 0.4 has been explored in previous Gabor-based texture analysis research. 
+
+    Returns:
+        kernel (np.array): spatial filter kernel
     """
 
     def m1(x, y): 
