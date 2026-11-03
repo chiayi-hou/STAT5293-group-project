@@ -95,7 +95,11 @@ def calculate_distance_matrix(test_features, centers, method):
         distances.append(row)
     return np.array(distances)
 
+# one of the main functions to be imported to IrisRecognition.py
 def fit_fisher_lda(train_features_dict, train_labels, n_components=None):
+    """
+    
+    """
     angles = [-9, -6, -3, 0, 3, 6, 9]
 
     # Combine features from all angles

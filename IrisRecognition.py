@@ -222,13 +222,17 @@ if __name__ == "__main__":
     print("\n Creating Fig. 10 (try out different LDA dimension)")
 
     # test different lda reduction dimension, plot visualization, and save the selected result for later comparison
-    # we selected 100 (among dimensions = [10, 20, 40, 60, 80, 90, 100, 107]) as the final dimension as the performances for all three methods seem to converge after 100.
-    # final_predictions 
+    # we selected 100 (among dimensions = [10, 20, 40, 60, 80, 90, 100, 107]) as the final dimension as the CRR for all three methods seem to converge around 100.
+    # final_predictions and final_distances are dictionaries that contains predictions and distances between testing and training centers for L1, L2, and Cosine methods
+    # using the selected 100-dimensional features.
     final_predictions, final_distances = test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_labels, selected_dimension=100)
   
     # Create Table 3: compare original result and lda result
     print("\n Creating Table 3: compare original result and LDA result")
+    # do iris matching on the original features (without reduction)
+    # save only the predictions as original_predictions because we won't use the distances
     original_predictions, _ = iris_matching(train_features, train_labels, test_features[0])
+    # create table to compare results between original features and the 100-dimensional features
     create_table_3(final_predictions, original_predictions, test_labels)
 
     # Verification

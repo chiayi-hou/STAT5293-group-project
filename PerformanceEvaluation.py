@@ -234,41 +234,52 @@ def test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_lab
         train_labels (np.array): contains all true labels for the training set
         test_reduced (np.ndarray): np.ndarrays that save reduced features (107 dimesion) for testing data (at angle 0)
         test_labels (np.array): contains all true labels for the testing set
-        selected_dimension (int): the function will return the prediction and distance result for the selected dimension for future comparison
+        selected_dimension (int): the function will return the prediction and distance result for the selected dimension for future comparison.
+                                  should be a value from [10, 20, 40, 60, 80, 90, 100, 107]
 
     Returns:
-        final_predictions
-        final_distances
-
+        final_predictions (dict): Dictionary containing predicted class labels for L1, L2, and Cosine similarity measure for the selected dimensionary reduction.
+                                  Keys are the matching methods and values are the predictions.
+        final_distances (dict): Dictionary containing matching distance between testing images and training class centers for three method for the selected dimensionary reduction.
+                                Keys are the matching methods and values are the distance.
     """
     # Ma et al. tried on roughly every 20 dimension. As we only have at most 107 dimension, we add few dimensions to try out to compare the result
     dimensions = [10, 20, 40, 60, 80, 90, 100, 107]
 
+    # create a dictionary of list to save the crr result for all the dimension
     methods = ["L1", "L2", "Cosine"]
     results = {"L1": [], "L2": [], "Cosine": []}
 
-    # save matching results for final evaluation
+    # empty variables to save matching predictions and distance between testing and training centers for final evaluation
     final_predictions = None
     final_distances = None
 
+    # loop through every dimension we want to try out
     for n in tqdm(dimensions):
+        # extract the first n components from the reduced features.
+        # we don't need to fit the Fisher LDA again because in sklearn's LinearDiscriminantAnalysis, n_components determines how many discriminant components are retained
+        # train_n and test_n are the new reduced training and testing features
         train_n = {angle: features[:, :n] for angle, features in dict_train_reduced.items()}
         test_n = test_reduced[:, :n]
 
+        # do iris matching on newly reduced features
+        # predicitons and distances are the reuslts for the current dimension
         predictions, distances = iris_matching(train_n, train_labels, test_n)
 
         # calculate CRR for each method
         for method in methods:
             crr = calculate_crr(test_labels, predictions[method])
+            # save the crr value to the full result dictionary for future ploting
             results[method].append(crr)
 
-        # TODO: save the selected result for future comparison
+        # save the selected result for future comparison
         if n == selected_dimension:
             final_predictions = predictions
             final_distances = distances
 
     # Plot CRR against LDA dimensions
     plt.figure(figsize=(8, 5))
+    # loop through each method to plot three lines in one figure
     for method in methods:
         plt.plot(dimensions, results[method], marker="o", label=method)
 
@@ -284,10 +295,20 @@ def test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_lab
 
 # one of the main functions to be import to IrisRecognition.py
 def create_table_3(final_predictions, original_predictions, test_labels):
-    print("\nTable 3: Recognition Results")
-    print(f"{'Method':<12} {'Original (%)':<15} {'Reduced (%)':<15}")
+    """
+    Compare prediction results for two different feature dimension. Calculate and print out the CRR.
 
+    Args:
+        final_predictions (dict): dictionary of arrays that save the predictions from the three matching methods for the selected dimension
+        original_predictions (dict): dictionary of arrays that save the predictions from the three matching methods for the original features without reduction
+        test_labels (np.ndarray): true labels for the testing images
+    """
+    print("\nTable 3: Recognition Results")
+    # print the table header
+    print(f"{'Method':<12} {'Original (%)':<15} {'Reduced (%)':<15}")
+    # loop through each method to calculate and print out results
     for method in ["L1", "L2", "Cosine"]:
+        # calculate CRR of the predictions using original features and reduced features 
         original_crr = calculate_crr(test_labels, original_predictions[method])
         reduced_crr = calculate_crr(test_labels, final_predictions[method])
 
