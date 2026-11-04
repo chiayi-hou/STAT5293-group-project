@@ -1,0 +1,131 @@
+1. Reference: Ma et al. (2003)
+2. Instruction on how to run
+3. Experiment design
+4. Logic of the Design:
+ |-- 4.1 IrisRecognition.py (main program): 
+            The main program connects all the functions from the other scripts to perform iris recognition. It first loads the CASIA Iris Image Database and separates the images into 
+        training and testing sets based on their sessions. In our dataset, there are 108 iris classes, with 3 training images and 4 testing images for each class. In the main program,
+        we did not read in all images at once directly. Instead, we read them in as an array of file path, and then read every single image when needed, so we can reduce the memery usage.
+            For each image, we first perform image quality assessment on both training and testing images. Althogh it is not required in our assignment, we tried to follow the instruction 
+        in the paper to implement it. We calculated a quality descriptor to evaluate its quality based on frequency information. We then use the descriptors from the training images to 
+        determine the quality thresholds and apply the same thresholds to both training and testing images. The result does not affect our training nor the testing sets. 
+            Next, for each images, we perform image preprocessing and feature extraction using get_features function. In this function, each image is read in and processed sequentially. We 
+        first use functions from IrisLocalization.py to identify the pupil and iris boundaries through iris localization. We then normaliza the iris image into a fixed size of 64*512 using
+        function from IrisNormalization.py. After that, we use function from ImageEnhancement.py to enhance the normalized images. Finally, the enhanced image would be sent to the function 
+        from FeatureExtraction.py to extract its features. For feature extraction, we use f=0.05 as the spatial frequency parameter. This value was selected during our initial implementation, 
+        as it produced recognition accuracy above 80% (more explanation in 4.5 FeatureExtraction.py).
+            To deal with possible iris rotation, we follow the rotation matching approach described by Ma et al. (2003) and generate seven different rotation versions for each training image
+        using angles [-9, -6, -3, 0, 3, 6, 9]. The rotation is performed during iris normalization; therefore, we will need to run normalization, enhancement, and feature extraction for one
+        image for 7 times if it is a training image. For testing images, they are only processed at 0 degrees.
+            Then, we fitted a Fisher LDA model by using function from IrisMatching.py using training data (including all 7 angles). With the LDA mdoel, we transformed the original 1536 features 
+        to 107 features for both training and the testing sets. 107 is the maximum number of LDA dimensions for our data, since our data contains only 108 iris classes. In the fit_fisher_lda 
+        function, we first combine the original training features from all seven angles into one array, then fit and transform them using a single LDA model. After the transformation, we split 
+        the reduced features back into seven arrays corresponding to the seven angles. With the returned LDA model, the testing features are then transformed in the main function.
+            Finally, we used the reduced features for iris matching. We first created a figure to compare the performance of different LDA feature dimensions, using the test_dimensionality 
+        function from IrisMatching.py. We selected [10, 20, 40, 60, 80, 90, 100, 107] dimensions for comparison. Since the LDA model has already been fitted with the maximum available dimensions, 
+        we can directly select the first n components from the transformed features without fitting the model again. For each dimension, we perform iris matching using the three distance measures,
+        which are L1, L2, and Cosine. Following the paper, we first calculated seven class centers for each class at each angles, and then calculate the distance between the testing features and 
+        the centers. For the 7 centers in each class, the smallest distance is selected as the representing distance for the class. Among all the classes, the one with the smallest distance would
+        be the predicted label. We repeated this process for all three methods, and calculated the CRR for the prediction, recoded the values and plot out the figure.
+            After plotting out the figure, we found out the CRR seems to converge around 100 dimension, so we selected 100 dimensions for the final recognition and verification experiments.Then, 
+        to create table 3 in Ma et al, we did iris matching on the original full 1536 features and compare how the reduction in dimension affect the performance. 
+            Finally, we evaluate the iris recognition system in verification mode using the matching distances obtained from the selected 100-dimensional features using the evaluate_verification 
+        function from PerformanceEvaluation.py. In this part, we evaluates whether an iris image matches a given class. We compare the testing images with all 108 iris classes and seprarate the 
+        matching distance into genuine and impostor comparisons based on their true labels. Then, we calculate the False Match Rate (FMR) and False Non-Match Rate (FNMR) using different distance 
+        thresholds. The result are used to generate Table 4 and plot the verification curves for L1, L2, and Cosine similarity measures.
+
+ |-- 4.2 IrisLocalization.py
+ |-- 4.3 IrisNormalization.py
+ |-- 4.4 ImageEnhancement.py:
+            This script implements the image enhancement method proposed by Ma et al. (2003), Section 3.2.3. It takes a normalized iris image with shape (64, 512) as input, estimates
+         and compensates for background illumation, and then applies local histogram equalization to improve the contrast of the iris textures. One thing that we found worth noticed
+         is that the authors often do operation or feature extractions within a small block of image (locally) so the difference over the whole image would still remain.
+            The first step is to estimate the background illumination of the normalized image. We divided the imiage into many 16*16 small blocks and calculate tge average pixel 
+        intensity of each block. Since the image size is 64*512, the result background illumination map would be 4*32. THen, we need to substract the background illumation from the 
+        original normalized image, so we extend the 4*32 map to 64*512 using the bicubic interpolation mentioned in Ma et a. (2003), which estimates intermediate values to create a
+        smoother background illumation map. After substracting the estimated background illumation from the original normalized image, it is now ready for histogram equalization.
+            To do histogram equalization, we divided the corrected image into many 32*32 small blocks and apply histogram equalization independently to each block. By doing this,
+        the local contrast would be improved and the iris textures would be more visible. The final enhanced images would remain the shape of 64*512.
+
+ |-- 4.5 FeatureExtraction.py:
+            This script implements the feature extraction method proposed by Ma et al. (2003), Section 3.3. It takes a normalized and enhanced iris image with shape (64, 512) as input
+        and extracts 1536 features from each image.
+            First, we selected only the upper 48 rows of the enhanced image as our Range of Interest (ROI), so the shape of the image would become 48*512. We are doing this because 
+        according to Ma et al. (2003), the iris region closer to the pupil contains more useful texture information and is less likely to be affected by eyelids and eyelashes.  
+            Next, we construct two spatial filters using Equation (3) from Ma et al.To construct each spatial filter kernel, we first determine its size based on the larger value between delta_x 
+        and delta_y. We used (6 * maximum delta vlaue + 1) as the kernel size to make sure it has a center (0,0) and covers most of the Gaussian envelope (3-sigma rule). Then, the kernels are 
+        plugged into the formula provided in Ma et al. to create spatial filters. The filters use a Gaussian envelope and a radial cosine function to capture local iris texture information.
+        The two sets of parameters delta_x and delta_y given in the paper are (3, 1.5) and (4.5, 1.5), where they control the spread of Gaussian envelope along the horizontal and vertical
+        directions. The parameter f controls the spatial frequency of the cosine function. A larger f captures high-frequency patterns better, and a lower f captures lower ones better. The 
+        value f is not mentioned in Ma et al., so we looks up for f that are often used in Gabor filters, and decided to try out values between 0.05 and 0.4. We first tried out 0.05, and the 
+        results are very good, so we did not move on to trying other values. After having a filter, we apply them to the ROI using OpenC's filter2D() function. It is noticable that after 
+        applying the filters, the ROI now may contains numbers that are out of the range of [0,255], and could have decimal numbers. The shape remains to be 48*512. 
+            For each filtered ROI, we divided the image into many 8*8 small blocks to extract 2 statistical features from each block. Since the shape of ROI is 48*512, we have 384*2 features for
+        each filtered ROI. In Ma et al., the 2 features are m and sigma. THe first feature m is the mean absolute filter response; this represents the average response strength of the local 
+        iris texture. The second feature sigme is the mean absolute deviation of the filter response magnitudes from their mean. This measures how much the response magnitudes vary within the 
+        block. Finally, we would get 768 features for each filtered ROI. As we have 2 filtered ROI, we would have 1536 features for image.
+
+ |-- 4.6 IrisMatching.py
+ |-- 4.7 PerformanceEvaluation.py
+
+5. Result: 
+   With our Effect of LDA Dimensions on Iris Recognition plot (Fig. 10 in the paper), we found that the performance of the matching significantly improved as the dimension grows
+   from 20 to 40. Then, the growing speeds started to decrease, finally seems to converge at aobut 100-dimension. We also noticed that the cosine matching method seems to perform
+   the best among the three, and then L2, and then L1. Since it seems to converge at around 100-dimension, we selected 100 as our reduced LDA dimension to do comparison and 
+   verifications. For 100-dimension reduced features, the Correct Recognition Rate (CRR) for L1, L2, and Cosine methods are 85.88%, 88.19%, and 91,20% correspondingly. 
+
+   Belows are the outputed Table 3 and Table 4 for our algorithm:
+
+    Table 3: Recognition Results
+    Method       Original (%)    Reduced (%)    
+    L1           93.98           85.88          
+    L2           87.50           88.19          
+    Cosine       87.96           91.20       
+
+    From Table 3, we noticed that the L1 matching method using all 1536 original features achieved the highest CRR of 93.98% among the six results. This somewhat matches our 
+    expectation that having more features could provide more information for recognition. However, it is also surprising because L1 generally performed worse than the other 
+    two methods in our LDA dimension comparison. One possible explanation is that L1 is more sensitive to the information lost during dimensionality reduction.
+    On the other hand, L2 and Cosine performed better with the reduced features than with the original features. This suggests that Fisher LDA may help these two methods by 
+    removing redundant information and improving the separation between different iris classes. In particular, Cosine achieved a CRR of 91.20% using only 100 features, 
+    compared to 87.96% using all 1536 features.
+    Overall, although dimensionality reduction does not improve the performance of every matching method, it allows us to significantly reduce the number of features while 
+    maintaining relatively high recognition accuracy. This also suggests that the effectiveness of dimensionality reduction depends on the similarity measure being used.
+    
+    Table 4-1: Verification Results: L1
+    Threshold       FMR (%)         FNMR (%)       
+    414.2233       0.100          45.833         
+    456.1755       0.999          33.102         
+    492.9569       5.000          20.602         
+    513.4249       9.999          15.509         
+
+    Table 4-2: Verification Results: L2
+    Threshold       FMR (%)         FNMR (%)       
+    2837.3440      0.100          45.139         
+    3447.4312      0.999          30.324         
+    4077.5352      5.000          18.287         
+    4463.4561      9.999          13.426         
+
+    Table 4-3: Verification Results: Cosine
+    Threshold       FMR (%)         FNMR (%)       
+    0.6244         0.100          14.815         
+    0.7252         0.999          7.639          
+    0.8042         5.000          3.009          
+    0.8463         9.999          1.620    
+
+6. Difference from the paper:
+   For this project, we mostly followed the instruction in the paper, unless it is not stated or stated in our assignment requriement. 
+   The following are some differences:
+        1. Dataset: Ma et al. uses a larger CASIA Iris Database with 306 iris classes and 2255 selected images. This results in out maximum 
+                    reduced feature dimension being 107 instead of 305.
+        2. Image Quality Assessment: Although we did verify the image quality, because of the assignment requirement, we did not remove the 
+                                     images that have low quality.
+        3. Image Enhancement: We performed min-max normalization step after background subtraction to rescale the pixel values into the range [0,255].
+                              This is not stated in the paper, but this step is necessary in order to use OpenCV's histogram equalization.
+        4. Feature Extraction: f and kernel size are not stated in the paper, so we did research and selected some values that seem reasonable. 
+        5. Testing Different Numbers of LDA Dimensions: The paper did not states what values they tested out for, but their plot seems to be oughly every
+                                                        20 dimension, so we also did the similar thing, with some additional dimensionalities to test out 
+                                                        since our maximum dimension is smaller.
+        6. Verification: We plotted the FMR and FNMR curves for L1, L2, and Cosine. Unlike the original paper, we did not implement additional recognition 
+                         methods for comparison or calculate confidence intervals using Bootstrap, as these were not required by our assignment.
+
+7. Limitations and Plausible improvement
