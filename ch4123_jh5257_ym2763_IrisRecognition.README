@@ -35,7 +35,32 @@
         thresholds. The result are used to generate Table 4 and plot the verification curves for L1, L2, and Cosine similarity measures.
 
  |-- 4.2 IrisLocalization.py
+            This script follows the iris localization method in Ma et al. (2003, Section 3.2.1). It takes an eye image and returns two circles as (x, y, radius). One marks the edge of the pupil, and 
+        the other marks where the iris meets the white of the eye. The circles are fitted separately because their centers can differ.
+
+            Step 1. Find the rough pupil center. The pupil is usually the darkest part of the image. The code adds up the pixel values in each row and column. The row and column with the lowest totals 
+        give the first guess for the pupil center.
+            Step 2. Refine the center and estimate the radius. The code crops a 120 × 120 patch around that guess. It finds the most common gray level below 100 and adds 10 to set the cutoff for pupil 
+        pixels. A 5 × 5 filter removes thin dark shapes such as eyelashes. The average position of the remaining pixels gives the new center, and their total area gives an estimate of the radius. 
+        The code repeats this step twice.
+            Step 3. Fit both circles. Canny detects edges, and the circular Hough transform picks the circle with the strongest support from those edges. The pupil search stays close to the estimates 
+        from step 2. The outer iris search allows radii from 90 to 135 pixels and keeps the center close to the pupil. It also uses lower Canny thresholds to pick up the fainter outer edge. We tuned 
+        these settings by looking at the circles drawn on the dataset images and checking whether images of the same eye had similar iris radii.
+
+            The script also includes the image quality check from Section 3.1. It uses the rough pupil location to take two 64 × 64 patches, one on each side of the pupil, where the iris is less likely 
+        to be covered by eyelids. For each patch, a Fourier transform measures the strength of low, middle, and high frequencies (F1, F2, and F3). The code calculates the total strength F1 + F2 + F3 and
+        the middle-frequency ratio F2 / (F1 + F3), then averages the results from both patches.
+
  |-- 4.3 IrisNormalization.py
+            This script follows the iris normalization method in Ma et al. (2003, Section 3.2.2). The iris can look bigger or smaller depending on the camera distance and how much the pupil opens. 
+        To make images easier to compare, the script unwraps the ring-shaped iris into a rectangle with 64 rows and 512 columns.
+            The columns go once around the iris counterclockwise. At each angle, the code finds one point on the pupil boundary and another on the outer iris boundary. It then samples along the line 
+        between those two points. The first row starts at the pupil, and each row after that moves one step toward the outer edge. This follows Equation (2) and works even when the two circles have 
+        different centers.
+            When a sample falls between pixels, OpenCV blends the four neighboring pixel values using bilinear interpolation. It uses zero for pixels beyond the image border.
+            The "init_angle_deg" setting changes where the unwrapping starts, which shifts the iris pattern across the columns. For rotation matching, we can reuse the same two boundary circles and 
+        unwrap each training image at seven starting angles (−9, −6, −3, 0, 3, 6, and 9 degrees).
+
  |-- 4.4 ImageEnhancement.py:
             This script implements the image enhancement method proposed by Ma et al. (2003), Section 3.2.3. It takes a normalized iris image with shape (64, 512) as input, estimates
          and compensates for background illumation, and then applies local histogram equalization to improve the contrast of the iris textures. One thing that we found worth noticed
@@ -129,3 +154,18 @@
                          methods for comparison or calculate confidence intervals using Bootstrap, as these were not required by our assignment.
 
 7. Limitations and Plausible improvement
+        All three correct recognition rates (CRRs) were above 80%, meeting the assignment requirement. The paper reported 99.43% on a larger dataset after selecting a 
+    frame from each image sequence. The two results come from different evaluation setups.
+        1. The iris boundary can be misplaced. Dark eyelashes or image borders can throw off the first pupil estimate. Eyelid edges can also pull the outer circle away 
+    from the actual iris boundary. In our check of 756 images, two pupil centers were off by more than 100 pixels, and about 65 outer circles hit a radius limit. One plausible
+    solution is by searching only the center of the image for the pupil and keeping side edges where the dark iris meets the brighter white of the eye.
+        2. Eyelids and eyelashes can hide iris texture. Both methods use the 48 rows closest to the pupil because this area is usually less covered. In narrow eyes, eyelids and 
+    eyelashes can still reach those rows. One solution is to detect and mask the covered pixels before calculating texture features.
+        3. Some settings were chosen by hand. The paper gives the filter formula and Gaussian settings, but leaves out details such as the exact filter frequency, kernel size, 
+    and localization settings. We chose values through trial and error. A better approach would tune them on a validation split drawn from the training images and reserve the 
+    test set for final evaluation.
+        4. LDA may overfit. We use three original training images per eye. Rotated copies help with alignment, but they add little independent information for learning from 1,536 features. 
+    Our L1 recognition rate fell from 93.98% to 85.88% after LDA. With 108 iris classes, our LDA can produce at most 107 features. The paper used 200 features with 306 classes. One better way
+    might be testing PCA before LDA or try regularized LDA.
+        5. Our verification results are weaker.At a false match rate of 0.1%, our best false nonmatch rate was 14.815% using cosine similarity. The paper reported 0.97%. We could 
+    test whether better localization reduces missed matches, use a log scale to make the low-FMR region easier to read, and bootstrap by iris class to report confidence intervals.
