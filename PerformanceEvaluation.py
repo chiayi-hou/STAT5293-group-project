@@ -34,7 +34,7 @@ def calculate_crr(true_labels, predicted_labels):
     crr = correct / total * 100
     return crr
 
-# TODO: NOT USED (currently). delete before submitting
+# identification evaluation
 def evaluate_identification(true_labels, predictions):
     """
     Evaluate identification accuracy for three distance methods.
