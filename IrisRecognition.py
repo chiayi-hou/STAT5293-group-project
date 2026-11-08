@@ -9,7 +9,7 @@ from IrisNormalization import IrisNormalization
 from ImageEnhancement import image_enhancement
 from FeatureExtraction import feature_extraction
 from IrisMatching import (iris_matching, fit_fisher_lda)
-from PerformanceEvaluation import (evaluate_verification, test_dimensionality, create_table_3)
+from PerformanceEvaluation import (evaluate_identification, evaluate_verification, test_dimensionality, create_table_3)
 
 """
 IrisRecognition.py - Main program for iris recognition.
@@ -226,7 +226,11 @@ if __name__ == "__main__":
     # final_predictions and final_distances are dictionaries that contains predictions and distances between testing and training centers for L1, L2, and Cosine methods
     # using the selected 100-dimensional features.
     final_predictions, final_distances = test_dimensionality(dict_train_reduced, train_labels, test_reduced, test_labels, selected_dimension=100)
-  
+
+    # Identification evaluation using 100-dimensional LDA features
+    print("\nIdentification Results:")
+    identification_results = evaluate_identification(test_labels, final_predictions)
+    
     # Create Table 3: compare original result and lda result
     print("\n Creating Table 3: compare original result and LDA result")
     # do iris matching on the original features (without reduction)
