@@ -164,7 +164,7 @@
             Finally, we report the verification results at target FMR levels of 0.1%, 1%, 5%, and 10%, and plot the verification curves for L1, L2, and Cosine distance in ROC_Curves.png.
 
 5. Result: 
-   With our Effect of LDA Dimensions on Iris Recognition plot (Fig. 10 in the paper), we found that the performance of the matching significantly improved as the dimension grows
+   From our Effect of LDA Dimensions on Iris Recognition plot, we found that the performance of the matching significantly improved as the dimension grows
    from 20 to 40. Then, the growing speeds started to decrease, finally seems to converge at aobut 100-dimension. We also noticed that the cosine matching method seems to perform
    the best among the three, and then L2, and then L1. Since it seems to converge at around 100-dimension, we selected 100 as our reduced LDA dimension to do comparison and 
    verifications. For 100-dimension reduced features, the Correct Recognition Rate (CRR) for L1, L2, and Cosine methods are 85.88%, 88.19%, and 91,20% correspondingly. 
@@ -177,7 +177,7 @@
     L2           87.50           88.19          
     Cosine       87.96           91.20       
 
-    From Table 3, we noticed that the L1 matching method using all 1536 original features achieved the highest CRR of 93.98% among the six results. This somewhat matches our 
+    From the Recognition Results Table above, we noticed that the L1 matching method using all 1536 original features achieved the highest CRR of 93.98% among the six results. This somewhat matches our 
     expectation that having more features could provide more information for recognition. However, it is also surprising because L1 generally performed worse than the other 
     two methods in our LDA dimension comparison. One possible explanation is that L1 is more sensitive to the information lost during dimensionality reduction.
     On the other hand, L2 and Cosine performed better with the reduced features than with the original features. This suggests that Fisher LDA may help these two methods by 
@@ -207,19 +207,19 @@
     0.8042         5.000          3.009          
     0.8463         9.999          1.620    
 
-    Table 4 presents the iris verification results using L1, L2, and Cosine distance measures. Unlike identification, which predicts the identity of an iris image, verification
+    The Verification Results Table above presents the iris verification results using L1, L2, and Cosine distance measures. Unlike identification, which predicts the identity of an iris image, verification
     determines whether an iris image matches a claimed identity. The threshold is the maximum distance allowed for two feature representations to be considered a match. If the distance
     is below or equal to the threshold, the match is accepted; otherwise, it is rejected. The False Match Rate (FMR) measures the percentage of comparisons between different iris 
     classes that are incorrectly accepted, while the False Non-Match Rate (FNMR) measures the percentage of comparisons from the same iris class that are incorrectly rejected. 
     Increasing the threshold generally increases FMR but decreases FNMR, reflecting a trade-off between the two types of errors.
 
-    From Table 4, we observed that Cosine distance consistently achieved the lowest FNMR among the three matching methods at the same FMR levels. For example, at an FMR of
+    From the Verification Results Table, we observed that Cosine distance consistently achieved the lowest FNMR among the three matching methods at the same FMR levels. For example, at an FMR of
     approximately 1%, the FNMR values for L1, L2, and Cosine were respectively 33.102%, 30.324%, and 7.639%. When FMR increased to approximately 5%, their FNMR values decreased to
     20.602%, 18.287%, and 3.009%. This indicates that Cosine distance provides better verification performance, as it rejects fewer genuine matches while maintaining the same false
     match rate. Overall, the verification results are consistent with the identification results using 100-dimensional LDA features, where Cosine also achieved the highest CRR of
     91.20% from Table 3.
 
-    Additionally, the ROC curves in Fig. 11 further illustrate the relationship between FMR and FNMR for the three distance measures. The Cosine curve is generally below the L1 and L2
+    Additionally, our ROC curves plot further illustrates the relationship between FMR and FNMR for the three distance measures. The Cosine curve is generally below the L1 and L2
     curves, indicating better verification performance across the evaluated FMR range.
 
 
@@ -253,5 +253,5 @@
         4. LDA may overfit. We use three original training images per eye. Rotated copies help with alignment, but they add little independent information for learning from 1,536 features. 
     Our L1 recognition rate fell from 93.98% to 85.88% after LDA. With 108 iris classes, our LDA can produce at most 107 features. The paper used 200 features with 306 classes. One better way
     might be testing PCA before LDA or try regularized LDA.
-        5. Our verification results are weaker.At a false match rate of 0.1%, our best false nonmatch rate was 14.815% using cosine similarity. The paper reported 0.97%. We could 
+        5. Our verification results are weaker. At a false match rate of 0.1%, our best false nonmatch rate was 14.815% using cosine similarity. The paper reported 0.97%. We could 
     test whether better localization reduces missed matches, use a log scale to make the low-FMR region easier to read, and bootstrap by iris class to report confidence intervals.
